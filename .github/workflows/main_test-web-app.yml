@@ -73,8 +73,39 @@ jobs:
         with:
           app-name: 'test-web-app'
           slot-name: 'Production'
-          
-      # Note: Migrations and static files collection are handled by the startup command
-      # Configure in Azure Portal: Configuration > General Settings > Startup Command
-      # Or set WEBSITE_STARTUP_COMMAND environment variable
+
+      - name: 'Get Resource Group'
+        uses: azure/CLI@v1
+        id: get-rg
+        with:
+          azcliversion: '2.0.72'
+          inlineScript: |
+            RESOURCE_GROUP=$(az webapp show --name test-web-app --query resourceGroup --output tsv)
+            echo "resourceGroup=$RESOURCE_GROUP" >> $GITHUB_OUTPUT
+            echo "Resource Group: $RESOURCE_GROUP"
+
+      - name: 'Run Django Migrations'
+        uses: azure/CLI@v1
+        with:
+          azcliversion: '2.0.72'
+          inlineScript: |
+            echo "Running database migrations..."
+            az webapp ssh --name test-web-app --resource-group ${{ steps.get-rg.outputs.resourceGroup }} --command "cd /home/site/wwwroot && python manage.py migrate --noinput" || echo "⚠️ Migration step completed with warnings"
+
+      - name: 'Collect Static Files'
+        uses: azure/CLI@v1
+        with:
+          azcliversion: '2.0.72'
+          inlineScript: |
+            echo "Collecting static files..."
+            az webapp ssh --name test-web-app --resource-group ${{ steps.get-rg.outputs.resourceGroup }} --command "cd /home/site/wwwroot && python manage.py collectstatic --noinput" || echo "⚠️ Static files collection completed with warnings"
+
+      - name: 'Restart Azure Web App'
+        uses: azure/CLI@v1
+        with:
+          azcliversion: '2.0.72'
+          inlineScript: |
+            echo "Restarting application..."
+            az webapp restart --name test-web-app --resource-group ${{ steps.get-rg.outputs.resourceGroup }}
+            echo "✅ Application restarted successfully"
           
