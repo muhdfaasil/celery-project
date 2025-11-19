@@ -23,7 +23,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-change-this-in-production'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = [host.strip().rstrip('/') for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')]
 
 # Application definition
 INSTALLED_APPS = [
@@ -33,11 +33,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'tasks',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -119,15 +121,38 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Celery Configuration
-CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/0")
+# Handle Azure Redis Cache (SSL) or local Redis
+celery_broker = env("CELERY_BROKER_URL", default="redis://localhost:6379/0")
+celery_backend = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/0")
+
+# If Redis URL doesn't start with redis:// or rediss://, add rediss:// for Azure Redis Cache
+if not celery_broker.startswith(('redis://', 'rediss://')):
+    celery_broker = f"rediss://{celery_broker}"
+elif celery_broker.startswith('redis://') and ':6380' in celery_broker:
+    # Azure Redis Cache uses SSL on port 6380
+    celery_broker = celery_broker.replace('redis://', 'rediss://')
+
+if not celery_backend.startswith(('redis://', 'rediss://')):
+    celery_backend = f"rediss://{celery_backend}"
+elif celery_backend.startswith('redis://') and ':6380' in celery_backend:
+    # Azure Redis Cache uses SSL on port 6380
+    celery_backend = celery_backend.replace('redis://', 'rediss://')
+
+CELERY_BROKER_URL = celery_broker
+CELERY_RESULT_BACKEND = celery_backend
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS", default="").split(",") if env("CORS_ALLOWED_ORIGINS") else []
+CORS_ALLOWED_ORIGINS = [origin.strip().rstrip('/') for origin in CORS_ALLOWED_ORIGINS if origin.strip()]
+CORS_ALLOW_CREDENTIALS = True
 
