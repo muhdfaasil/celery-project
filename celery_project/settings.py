@@ -25,6 +25,21 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = [host.strip().rstrip('/') for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')]
 
+# CSRF Configuration
+# Parse CSRF trusted origins from environment or use ALLOWED_HOSTS
+csrf_origins = env("CSRF_TRUSTED_ORIGINS", default="")
+if csrf_origins:
+    CSRF_TRUSTED_ORIGINS = [origin.strip().rstrip('/') for origin in csrf_origins.split(',') if origin.strip()]
+else:
+    # Auto-generate from ALLOWED_HOSTS (add https:// prefix)
+    CSRF_TRUSTED_ORIGINS = [f"https://{host}" for host in ALLOWED_HOSTS if host not in ['localhost', '127.0.0.1']]
+    CSRF_TRUSTED_ORIGINS.extend([f"http://{host}" for host in ALLOWED_HOSTS if host in ['localhost', '127.0.0.1']])
+
+# CSRF Cookie settings for HTTPS
+CSRF_COOKIE_SECURE = not DEBUG  # Only secure in production
+CSRF_COOKIE_HTTPONLY = False  # Allow JavaScript to read the cookie
+CSRF_USE_SESSIONS = False  # Use cookies (default)
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
