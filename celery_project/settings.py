@@ -48,13 +48,11 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'corsheaders',
     'tasks',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -144,84 +142,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Celery Configuration
 # Handle Azure Redis Cache (SSL) or local Redis
-def parse_redis_connection(connection_string):
-    """
-    Parse Redis connection string in various formats:
-    1. StackExchange.Redis format: host:port,password=xxx,ssl=True
-    2. Redis URL format: redis://host:port/db or rediss://:password@host:port/db
-    3. Simple format: host:port/db
-    Returns a properly formatted Redis URL for Celery.
-    """
-    if not connection_string:
-        return "redis://localhost:6379/0"
-    
-    # If already a Redis URL, return as is
-    if connection_string.startswith(('redis://', 'rediss://')):
-        return connection_string
-    
-    # Parse StackExchange.Redis connection string format
-    # Format: host:port,password=xxx,ssl=True,abortConnect=False
-    if ',' in connection_string:
-        params = {}
-        parts = connection_string.split(',')
-        host_port = parts[0]
-        
-        # Parse key-value pairs
-        for part in parts[1:]:
-            if '=' in part:
-                key, value = part.split('=', 1)
-                params[key.strip().lower()] = value.strip()
-        
-        # Extract host and port
-        if ':' in host_port:
-            host, port = host_port.rsplit(':', 1)
-        else:
-            host = host_port
-            port = '6379'
-        
-        # Build Redis URL
-        scheme = 'rediss' if params.get('ssl', '').lower() == 'true' else 'redis'
-        password = params.get('password', '')
-        db = params.get('db', '0')
-        
-        if password:
-            return f"{scheme}://:{password}@{host}:{port}/{db}"
-        else:
-            return f"{scheme}://{host}:{port}/{db}"
-    
-    # Simple format: host:port/db or host:port
-    if '/' in connection_string:
-        host_port, db = connection_string.rsplit('/', 1)
-    else:
-        host_port = connection_string
-        db = '0'
-    
-    if ':' in host_port:
-        host, port = host_port.rsplit(':', 1)
-    else:
-        host = host_port
-        port = '6379'
-    
-    # Azure Redis Cache uses SSL on port 6380
-    scheme = 'rediss' if port == '6380' else 'redis'
-    return f"{scheme}://{host}:{port}/{db}"
-
-celery_broker = env("CELERY_BROKER_URL", default="redis://localhost:6379/0")
-celery_backend = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/0")
-
-# Parse and format Redis connections
-celery_broker = parse_redis_connection(celery_broker)
-celery_backend = parse_redis_connection(celery_backend)
-
-CELERY_BROKER_URL = celery_broker
-CELERY_RESULT_BACKEND = celery_backend
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/0")
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
-
-# CORS Configuration
-CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS", default="").split(",") if env("CORS_ALLOWED_ORIGINS") else []
-CORS_ALLOWED_ORIGINS = [origin.strip().rstrip('/') for origin in CORS_ALLOWED_ORIGINS if origin.strip()]
-CORS_ALLOW_CREDENTIALS = True
 
