@@ -6,7 +6,7 @@
 echo "Starting Django application..."
 
 # Change to the app directory
-cd /home/site/wwwroot
+cd /tmp/8de27351fb5c391
 
 # Run migrations (if needed)
 echo "Running database migrations..."
