@@ -80,9 +80,14 @@ jobs:
         with:
           azcliversion: '2.0.72'
           inlineScript: |
-            RESOURCE_GROUP=$(az webapp show --name test-web-app --query resourceGroup --output tsv)
+            echo "Finding resource group for app: test-web-app"
+            RESOURCE_GROUP=$(az webapp list --query "[?name=='test-web-app'].resourceGroup" --output tsv | head -n 1)
+            if [ -z "$RESOURCE_GROUP" ]; then
+              echo "❌ Could not find resource group for test-web-app"
+              exit 1
+            fi
             echo "resourceGroup=$RESOURCE_GROUP" >> $GITHUB_OUTPUT
-            echo "Resource Group: $RESOURCE_GROUP"
+            echo "✅ Resource Group: $RESOURCE_GROUP"
 
       - name: 'Run Django Migrations'
         uses: azure/CLI@v1
