@@ -144,21 +144,74 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Celery Configuration
 # Handle Azure Redis Cache (SSL) or local Redis
+def parse_redis_connection(connection_string):
+    """
+    Parse Redis connection string in various formats:
+    1. StackExchange.Redis format: host:port,password=xxx,ssl=True
+    2. Redis URL format: redis://host:port/db or rediss://:password@host:port/db
+    3. Simple format: host:port/db
+    Returns a properly formatted Redis URL for Celery.
+    """
+    if not connection_string:
+        return "redis://localhost:6379/0"
+    
+    # If already a Redis URL, return as is
+    if connection_string.startswith(('redis://', 'rediss://')):
+        return connection_string
+    
+    # Parse StackExchange.Redis connection string format
+    # Format: host:port,password=xxx,ssl=True,abortConnect=False
+    if ',' in connection_string:
+        params = {}
+        parts = connection_string.split(',')
+        host_port = parts[0]
+        
+        # Parse key-value pairs
+        for part in parts[1:]:
+            if '=' in part:
+                key, value = part.split('=', 1)
+                params[key.strip().lower()] = value.strip()
+        
+        # Extract host and port
+        if ':' in host_port:
+            host, port = host_port.rsplit(':', 1)
+        else:
+            host = host_port
+            port = '6379'
+        
+        # Build Redis URL
+        scheme = 'rediss' if params.get('ssl', '').lower() == 'true' else 'redis'
+        password = params.get('password', '')
+        db = params.get('db', '0')
+        
+        if password:
+            return f"{scheme}://:{password}@{host}:{port}/{db}"
+        else:
+            return f"{scheme}://{host}:{port}/{db}"
+    
+    # Simple format: host:port/db or host:port
+    if '/' in connection_string:
+        host_port, db = connection_string.rsplit('/', 1)
+    else:
+        host_port = connection_string
+        db = '0'
+    
+    if ':' in host_port:
+        host, port = host_port.rsplit(':', 1)
+    else:
+        host = host_port
+        port = '6379'
+    
+    # Azure Redis Cache uses SSL on port 6380
+    scheme = 'rediss' if port == '6380' else 'redis'
+    return f"{scheme}://{host}:{port}/{db}"
+
 celery_broker = env("CELERY_BROKER_URL", default="redis://localhost:6379/0")
 celery_backend = env("CELERY_RESULT_BACKEND", default="redis://localhost:6379/0")
 
-# If Redis URL doesn't start with redis:// or rediss://, add rediss:// for Azure Redis Cache
-if not celery_broker.startswith(('redis://', 'rediss://')):
-    celery_broker = f"rediss://{celery_broker}"
-elif celery_broker.startswith('redis://') and ':6380' in celery_broker:
-    # Azure Redis Cache uses SSL on port 6380
-    celery_broker = celery_broker.replace('redis://', 'rediss://')
-
-if not celery_backend.startswith(('redis://', 'rediss://')):
-    celery_backend = f"rediss://{celery_backend}"
-elif celery_backend.startswith('redis://') and ':6380' in celery_backend:
-    # Azure Redis Cache uses SSL on port 6380
-    celery_backend = celery_backend.replace('redis://', 'rediss://')
+# Parse and format Redis connections
+celery_broker = parse_redis_connection(celery_broker)
+celery_backend = parse_redis_connection(celery_backend)
 
 CELERY_BROKER_URL = celery_broker
 CELERY_RESULT_BACKEND = celery_backend
